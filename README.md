@@ -1,7 +1,7 @@
 # FlyingGame
 Simple 3D flying game web app which showcases terrain generation, shading and fog.
 
-The simplest way to launch the game is to create a local server using python 3 in a command-line interface.
+The simplest way to launch the game is to create a local server using [python 3](https://www.python.org/downloads/) in a command-line interface.
 Once you're in the source code directory, run the python server on port 8000:
 
 `python3 -m http.server 8000`
