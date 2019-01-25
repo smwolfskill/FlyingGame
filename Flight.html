@@ -1,0 +1,200 @@
+<!DOCTYPE HTML>
+<!-- @author      Scott Wolfskill, wolfski2 
+     @created     03/06/2017
+     @last edit   05/03/2017           -->
+<html lang="en"> 
+<head>
+<title>MP4 Sphere Game</title>
+<meta charset="utf-8"> 
+</head>
+    
+<script id="shader-vs" type="x-shader/x-vertex">
+   attribute vec3 aVertexNormal;
+   attribute vec3 aVertexPosition;
+
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+    
+    varying vec3 vVertexPosition;
+    varying vec3 vVertexNormal;
+
+    void main(void) {
+        vVertexNormal = aVertexNormal;
+        vVertexPosition = aVertexPosition;
+        gl_Position = uPMatrix*uMVMatrix*vec4(aVertexPosition, 1.0);
+    }
+</script>
+  
+<script id="shader-fs" type="x-shader/x-fragment">
+precision highp float;
+
+uniform bool fog;
+uniform bool terrain; //true if we're rendering the terrain and should colormap
+
+uniform mat4 fs_uMVMatrix;
+uniform mat3 uNMatrix;
+uniform vec3 uLightPosition;
+uniform vec3 uDiffuseLightColor;
+uniform vec3 uSpecularLightColor;
+uniform vec3 uAmbientLightColor; //used for everything other than terrain
+
+varying vec3 vVertexPosition;
+varying vec3 vVertexNormal;
+
+const float shininess = 2.0;//32.0;
+
+void main(void) {
+    vec3 ambientLightColor; //not uniform b/c we set it here with our colormap below
+    vec3 tColors[5]; //terrain colors (in color map)
+    tColors[0] = vec3(0.0, 0.0706, 0.88); //blue
+    tColors[1] = vec3(0.18, 0.95, 0.095); //green
+    tColors[2] = vec3(0.3, 0.23, 0.0); //dark brown
+    tColors[3] = vec3(0.659, 0.99, 1.0); //cyan
+    tColors[4] = vec3(0.8, 0.8, 0.8); //almost white
+    if(terrain) { //Colormap for terrain
+        /*if(vVertexPosition[2] <= 0.25) ambientLightColor = vec3(0.0, 0.0706, 0.88); //blue
+        else if(vVertexPosition[2] <= 0.5) ambientLightColor = vec3(0.18, 0.95, 0.095); //green
+        else if(vVertexPosition[2] <= 0.7) ambientLightColor =  vec3(0.3, 0.23, 0.0); //dark brown
+        else if(vVertexPosition[2] <= 0.78) ambientLightColor =  vec3(0.659, 0.99, 1.0); //cyan
+        else ambientLightColor =  vec3(0.8, 0.8, 0.8); //almost white
+        */
+        if(vVertexPosition[1] <= 0.25) ambientLightColor = tColors[0];
+        else if(vVertexPosition[1] <= 0.5) ambientLightColor = mix(tColors[0], tColors[1], (vVertexPosition[1]-0.25) / 0.25); //tColors[1];
+        else if(vVertexPosition[1] <= 0.7) ambientLightColor =  mix(tColors[1], tColors[2], (vVertexPosition[1]-0.5) / 0.2);
+        else if(vVertexPosition[1] <= 0.78) ambientLightColor =  mix(tColors[2], tColors[3], (vVertexPosition[1]-0.7) / 0.08);
+        else ambientLightColor =  mix(tColors[3], tColors[4], (vVertexPosition[1]-0.78) / 0.22);
+    } else { //Regular objects with a base color
+        ambientLightColor = uAmbientLightColor;
+    }
+    
+    // Get the vertex position in eye coordinates
+    vec4 vertexPositionEye4 = fs_uMVMatrix * vec4(vVertexPosition, 1.0);
+    vec3 vertexPositionEye3 = vertexPositionEye4.xyz / vertexPositionEye4.w;
+  
+    // Calculate the vector (l) to the light source
+    vec3 vectorToLightSource = normalize(uLightPosition - vertexPositionEye3);
+    
+    // Transform the normal (n) to eye coordinates
+    vec3 normalEye = normalize(uNMatrix * vVertexNormal);
+    
+    // Calculate n dot l for diffuse lighting
+    float diffuseLightWeightning = max(dot(normalEye, 
+                                    vectorToLightSource), 0.0);
+                                       
+    // Calculate the reflection vector (r) that is needed for specular light
+    vec3 reflectionVector = normalize(reflect(-vectorToLightSource, 
+                                             normalEye));
+    
+    // The camera in eye coordinates is located in the origin and is pointing
+    // along the negative z-axis. Calculate viewVector (v) 
+    // in eye coordinates as:
+    // (0.0, 0.0, 0.0) - vertexPositionEye3
+    vec3 viewVectorEye = -normalize(vertexPositionEye3);
+    
+    float rdotv = max(dot(reflectionVector, viewVectorEye), 0.0);
+    
+    float specularLightWeightning = pow(rdotv, shininess);
+
+    // Sum up all three reflection components
+    vec4 shadeColor = vec4((ambientLightColor
+                + uDiffuseLightColor * diffuseLightWeightning
+                + uSpecularLightColor * specularLightWeightning),1.0);
+                
+    if(!fog) { //simple, no fog
+        gl_FragColor = shadeColor;
+    } else {
+        const float LOG2 = 1.442695;
+        const float fogDensity = 0.4; //in [0.0, 1.0]
+        const vec4 fogColor = vec4(0.9, 0.9, 0.9, 1.0);
+        float z = gl_FragCoord.z / gl_FragCoord.w;
+        float fogFactor = exp2( -1.0 * fogDensity * fogDensity * z * z * LOG2 );
+        fogFactor = clamp(fogFactor, 0.0, 1.0);
+        
+        gl_FragColor = mix(fogColor, shadeColor, fogFactor );
+    }
+ }
+</script>
+
+<script src="gl-matrix-min.js"></script> 
+<script type="text/javascript" src="webgl-utils.js"></script>
+<script src="mp4.js"></script>
+<script src="diamondSquare.js"></script>
+<script src="spherePhysics.js"></script>
+<script src="simpleModeling.js"></script>
+<style>
+    columnLeft {
+        float: left;
+        text-align: left;
+        max-width: 160px;
+        margin: 0;
+        padding: 1em;
+        line-height: 28px;
+    }
+    columnRight {
+        float: right;
+        text-align: left;
+        max-width: 160px;
+        margin: 0;
+        padding: 1em;
+        line-height: 28px;
+    }
+    input[type=number]{
+        width: 39px;
+        padding-left: 1px;
+    }
+    label {
+        padding-right: 30px;
+    }
+</style>
+<body onload="startup();">
+    <columnLeft>
+        <body text="black">
+            <h2>Controls</h2>
+            <p float="right"> W, ↑ : Pitch up</p>
+            <p> S, ↓ : Pitch down</p>
+            <p> A, ← : Turn left</p>
+            <p> D, → : Turn right</p>
+            <p> Q    : Roll left</p>
+            <p> E    : Roll right</p>
+            <p> 1, + : Accelerate</p>
+            <p> 3, - : Decelerate</p>
+            <p> Space: Pause</p>
+            <p> Enter: Unpause</p>
+        </body>
+    </columnLeft>
+    <columnRight>
+        <body text="black">
+            <h2>Instructions</h2>
+            <p>The goal is to fly around and collect as many spheres falling from the sky as possible. There are several types with different properties:</p>
+            <p id="text_sphere0"><strong>Silver: </strong><span style="color:black">+1 Score. The most common sphere.</span></p>
+            <p id="text_sphere1"><strong>Gold: </strong><span style="color:black">+3 Score. More rare than silver.</span></p>
+            <p id="text_sphere2"><strong>Pink: </strong><span style="color:black">Lose all score; avoid these!</span></p>
+            <p id="text_sphere3"><strong>Green: </strong><span style="color:black">Reverse gravity for 5 seconds, and score double points for 15 seconds! Rare.</span></p>
+        </body>
+    </columnRight>
+    <div class="wrapper" style="margin: 0 auto; width: 850px; position: relative;">
+        <canvas id="myGLCanvas" width="850" height="550"></canvas>
+        <div id="overlay" style="position: absolute; top:0; left:0;">
+            <div>Spheres Collected: <span id="score"></span> <span id="msg_score"></span></div>
+            <div><span id="msg_info"></span></div>
+        </div>
+        <form id="input_form">
+            <fieldset>
+                <legend>Rendering Parameters</legend>
+                <label>
+                    Grid Size (powers of 2) <input type="number" id="gridSize" min="1" max = "100" value="6">
+                    <input type="button" form="input_form"id="redraw" value="Randomize" onclick="setupBuffers()">
+                </label>
+                <label>
+                    FOV <input type="number" id="fov" min="45" max="90" value="60">
+                </label>
+                <label>
+                    Turn Speed <input type="range" id="turnSpeed" value="50">
+                </label>
+                <input type="checkbox" id="fog"> Fog
+            </fieldset>
+        </form>
+    </div>
+</body>
+
+</html>
