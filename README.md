@@ -13,3 +13,5 @@ Or if you have python 2,
 Then open the game in your browser:
 
 `localhost:8000/Flight.html`
+
+To quit the server (unix) simply hit `CTRL^C` in command-line.
